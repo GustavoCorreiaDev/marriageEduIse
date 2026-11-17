@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fotos salvas</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; margin-top: 20px; }
+    .grid figure { margin: 0; background: #fafafa; border-radius: 10px; overflow: hidden; }
+    .grid img { width: 100%; display: block; }
+    .grid figcaption { font-size: 12px; color: #666; padding: 6px; }
+    .vazio { color: #888; margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <main style="max-width: 640px;">
+    <h1>Fotos salvas</h1>
+    <p id="info"></p>
+    <div id="grid" class="grid"></div>
+    <p class="link"><a href="index.html">← Enviar outra</a></p>
+  </main>
+
+  <script>
+    const KEY = 'fotos_webp';
+    const fotos = JSON.parse(localStorage.getItem(KEY) || '[]');
+    const grid = document.getElementById('grid');
+    const info = document.getElementById('info');
+
+    if (!fotos.length) {
+      info.textContent = 'Nenhuma foto salva ainda.';
+      info.className = 'vazio';
+    } else {
+      const totalKB = fotos.reduce((s, f) => s + (f.tamanhoKB || 0), 0);
+      info.textContent = `${fotos.length} foto(s) • ${totalKB} KB no total`;
+      fotos.reverse().forEach((f) => {
+        const fig = document.createElement('figure');
+        fig.innerHTML = `
+          <img src="${f.imagem}" alt="Foto" />
+          <figcaption>${new Date(f.data).toLocaleString('pt-BR')}<br/>${f.tamanhoKB} KB</figcaption>
+        `;
+        grid.appendChild(fig);
+      });
+    }
+  </script>
+</body>
+</html>
