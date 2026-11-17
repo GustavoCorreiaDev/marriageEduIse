@@ -1,116 +1,124 @@
+import { salvarMidia } from './db.js';
+
 const fileInput = document.getElementById('file');
 const preview   = document.getElementById('preview');
 const btnEnviar = document.getElementById('enviar');
 const status    = document.getElementById('status');
 
-let arquivoOtimizado = null; // Blob WebP
-let previewUrl = null;
+const MAX_LADO_FOTO = 1200;
+const QUALIDADE_FOTO = 0.8;
+const MAX_VIDEO_SEG = 10;
+const MAX_VIDEO_MB  = 25;
 
-const MAX_LADO  = 1200;
-const QUALIDADE = 0.8;
-const STORAGE_KEY = 'fotos_webp';
+let fila = []; // { blob, tipo, nome }
 
-// ---------- SELEÇÃO E COMPRESSÃO ----------
 fileInput.addEventListener('change', async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-
-  status.textContent = 'Otimizando imagem...';
+  fila = [];
+  preview.innerHTML = '';
   btnEnviar.disabled = true;
+  status.textContent = 'Processando...';
 
-  // limpa preview anterior
-  if (previewUrl) URL.revokeObjectURL(previewUrl);
-
-  const imagem = await carregarImagem(file);
-  const { blob, url } = await otimizarParaWebP(imagem);
-
-  arquivoOtimizado = blob;
-  previewUrl = url;
-
-  preview.innerHTML = `<img src="${url}" alt="Preview" />`;
-  status.textContent = `Pronto! ${(blob.size / 1024).toFixed(0)} KB em WebP`;
-  btnEnviar.disabled = false;
-});
-
-// ---------- BOTÃO SALVAR ----------
-btnEnviar.addEventListener('click', async () => {
-  if (!arquivoOtimizado) return;
-
-  status.textContent = 'Salvando...';
-  btnEnviar.disabled = true;
-
-  try {
-    const base64 = await blobParaBase64(arquivoOtimizado);
-
-    const fotos = carregarFotos();
-    fotos.push({
-      id: Date.now(),
-      data: new Date().toISOString(),
-      tamanhoKB: Math.round(arquivoOtimizado.size / 1024),
-      imagem: base64, // data:image/webp;base64,...
-    });
-
-    salvarFotos(fotos);
-    status.textContent = '✅ Foto salva no navegador!';
-  } catch (err) {
-    console.error(err);
-    status.textContent = '❌ Erro ao salvar. Talvez o armazenamento esteja cheio.';
-  } finally {
-    btnEnviar.disabled = false;
+  for (const file of Array.from(e.target.files)) {
+    try {
+      if (file.type.startsWith('image/')) {
+        const blob = await comprimirFoto(file);
+        fila.push({ blob, tipo: 'foto', nome: file.name });
+      } else if (file.type.startsWith('video/')) {
+        if (await validarVideo(file)) {
+          fila.push({ blob: file, tipo: 'video', nome: file.name });
+        }
+      }
+    } catch (err) {
+      console.error('Erro com', file.name, err);
+    }
   }
+
+  renderPreview();
+  status.textContent = fila.length
+    ? `${fila.length} arquivo(s) prontos.`
+    : 'Nenhum arquivo válido.';
+  btnEnviar.disabled = fila.length === 0;
 });
 
-// ---------- HELPERS ----------
-function carregarImagem(file) {
+function renderPreview() {
+  preview.innerHTML = '';
+  fila.forEach(({ blob, tipo }) => {
+    const url = URL.createObjectURL(blob);
+    const el = document.createElement('div');
+    el.className = 'preview-item';
+    el.innerHTML = tipo === 'foto'
+      ? `<img src="${url}" />`
+      : `<video src="${url}" muted playsinline></video>`;
+    preview.appendChild(el);
+  });
+}
+
+function comprimirFoto(file) {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.onload = () => resolve(img);
+    img.onload = () => {
+      let { width, height } = img;
+      if (width > height && width > MAX_LADO_FOTO) {
+        height = Math.round(height * MAX_LADO_FOTO / width);
+        width = MAX_LADO_FOTO;
+      } else if (height > MAX_LADO_FOTO) {
+        width = Math.round(width * MAX_LADO_FOTO / height);
+        height = MAX_LADO_FOTO;
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+      canvas.toBlob(
+        (b) => b ? resolve(b) : reject(new Error('toBlob falhou')),
+        'image/webp',
+        QUALIDADE_FOTO
+      );
+    };
     img.onerror = reject;
     img.src = URL.createObjectURL(file);
   });
 }
 
-async function otimizarParaWebP(img) {
-  let { width, height } = img;
-  if (width > height && width > MAX_LADO) {
-    height = Math.round(height * MAX_LADO / width);
-    width = MAX_LADO;
-  } else if (height > MAX_LADO) {
-    width = Math.round(width * MAX_LADO / height);
-    height = MAX_LADO;
+async function validarVideo(file) {
+  if (file.size > MAX_VIDEO_MB * 1024 * 1024) {
+    alert(`"${file.name}" passa de ${MAX_VIDEO_MB} MB.`);
+    return false;
   }
+  const dur = await obterDuracao(file);
+  if (dur > MAX_VIDEO_SEG + 0.5) {
+    alert(`"${file.name}" tem ${dur.toFixed(1)}s (máx ${MAX_VIDEO_SEG}s).`);
+    return false;
+  }
+  return true;
+}
 
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-
+function obterDuracao(file) {
   return new Promise((resolve) => {
-    canvas.toBlob(
-      (blob) => resolve({ blob, url: URL.createObjectURL(blob) }),
-      'image/webp',
-      QUALIDADE
-    );
+    const v = document.createElement('video');
+    v.preload = 'metadata';
+    v.onloadedmetadata = () => { URL.revokeObjectURL(v.src); resolve(v.duration); };
+    v.onerror = () => resolve(0);
+    v.src = URL.createObjectURL(file);
   });
 }
 
-function blobParaBase64(blob) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
-}
+btnEnviar.addEventListener('click', async () => {
+  btnEnviar.disabled = true;
+  let ok = 0;
 
-function carregarFotos() {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
-  } catch {
-    return [];
+  for (let i = 0; i < fila.length; i++) {
+    status.textContent = `Salvando ${i + 1}/${fila.length}...`;
+    try {
+      await salvarMidia(fila[i]);   // ← única chamada de persistência
+      ok++;
+    } catch (err) {
+      console.error(err);
+    }
   }
-}
 
-function salvarFotos(fotos) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(fotos));
-}
+  status.textContent = `✅ ${ok}/${fila.length} salvos!`;
+  fila = [];
+  preview.innerHTML = '';
+  fileInput.value = '';
+});

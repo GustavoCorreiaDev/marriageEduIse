@@ -3,26 +3,24 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Enviar Foto</title>
+  <title>Enviar</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <main>
-    <h1>Envie sua foto 📸</h1>
-    <p>Tire ou escolha uma foto. Ela será otimizada automaticamente.</p>
+    <h1>Envie suas fotos / vídeos 📸</h1>
+    <p>Pode selecionar várias fotos e vídeos de até 10s.</p>
 
-    <label for="file" class="btn">Escolher / Tirar foto</label>
-    <input id="file" type="file" accept="image/*" capture="environment" hidden />
+    <label for="file" class="btn">Escolher arquivos</label>
+    <input id="file" type="file" accept="image/*,video/*" multiple hidden />
 
-    <div id="preview"></div>
-    <button id="enviar" disabled>Salvar foto</button>
+    <div id="preview" class="preview-grid"></div>
+    <button id="enviar" disabled>Salvar</button>
     <p id="status"></p>
 
-    <p class="link">
-      <a href="galeria.html">Ver fotos salvas →</a>
-    </p>
+    <p class="link"><a href="galeria.html">Ver galeria →</a></p>
   </main>
 
-  <script src="app.js"></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>
